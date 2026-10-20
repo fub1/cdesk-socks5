@@ -3,6 +3,21 @@
 基于 things-go/go-socks5 v0.1.3（c47d209a1459e1c86f200ba174eca9cb0bd5a14e）的最小服务。
 使用原有 MIT 许可证。生产程序只使用 Go 标准库和本仓库代码，无 CGo。
 
+## RustDesk 服务端兼容前提
+
+本程序提供 TCP 隧道，不会补齐 hbbs 的注册协议。官方客户端启用内置 SOCKS5 后会走 TCP 注册；
+官方开源版 hbbs 的 TCP `RegisterPk` 分支返回 `NOT_SUPPORT`，不能使用此组合完成上线。
+官方在 [SOCKS5 问题 #13010](https://github.com/rustdesk/rustdesk/issues/13010) 中确认该能力仅支持 Pro 服务端。
+定制服务端需要自行确认已经实现相应 TCP 注册和握手能力；仅添加 API 不能证明兼容。
+
+客户端流程可核对官方 [1.4.3 rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/blob/1.4.3/src/rendezvous_mediator.rs)：
+`start` 在代理模式选择 `start_tcp`，随后 `secure_tcp` 等待服务端首次握手，之后才发送注册。
+官方 OSS 的处理见 [rendezvous_server.rs](https://github.com/rustdesk/rustdesk-server/blob/master/src/rendezvous_server.rs) 中的 `handle_tcp`。
+
+因此，TCP 端口可达或日志出现 `connected` 均不能作为 RustDesk 已上线的证据。
+如果使用 OSS，应改用保留正常 UDP 注册的网络转发方案，或实现兼容的服务端 TCP 注册；
+仅在 SOCKS5 服务中增加 UDP ASSOCIATE，不能改变上述客户端已选择 TCP 的行为。
+
 ## 启动
 
 1. 将 `config.example.json` 复制为 EXE 所在目录中的 `config.json`。
@@ -72,7 +87,7 @@ RustDesk 的网络/代理设置：
 密码：与 auth.password 一致
 ```
 
-保持 ID 服务器、Relay 服务器、API 地址及公钥为原来的配置。确认安装版服务进程也取得代理设置。
+在服务端满足上述兼容前提时，保持 ID 服务器、Relay 服务器、API 地址及公钥为原来的配置。确认安装版服务进程也取得代理设置。
 不启用 WebSocket 叠加代理。SOCKS5 用户名密码在客户端到中转设备之间明文传输，部署在可信内网。
 
 ## 资源和日志
@@ -106,6 +121,9 @@ RustDesk 的网络/代理设置：
    `bytes_to_upstream` 是向服务器实际写入的业务字节，`bytes_from_upstream` 是从服务器读取的业务字节，不含 SOCKS5 认证和连接响应。
    `upstream_read_end` 表示从服务器读取结束；`client_to_upstream_copy_end` 表示客户端方向的复制循环结束，可能因 EOF 或读取错误，须结合相邻错误日志判断。
    计数不代表客户端已解析或接受数据；异常强制关闭时摘要是关闭当时的计数。
+10. 如果 21116 反复在约 18 秒结束，且两方向计数都是 0，优先核对客户端版本及服务端是否支持 TCP 注册握手。
+    官方客户端的 `secure_tcp` 存在等待服务端首帧的流程，读取超时为 18 秒；这是符合该日志的原因之一，不能仅凭计数认定部署端的最终故障位置。
+    官方 OSS 不发送该握手且不支持 TCP 注册；若实际为 Pro/其他实现，则需进一步比对中转机直连结果和客户端握手错误。
 
 ## 编译与验证
 
