@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/things-go/go-socks5/internal/gateway"
@@ -24,7 +25,7 @@ func main() {
 }
 
 func run(logger *log.Logger) error {
-	path := flag.String("config", "config.json", "JSON configuration path")
+	path := flag.String("config", "", "JSON configuration path (default: config.json beside the executable)")
 	check := flag.Bool("check", false, "validate configuration and resolve allowed targets, then exit")
 	showVersion := flag.Bool("version", false, "print build version")
 	flag.Parse()
@@ -34,6 +35,13 @@ func run(logger *log.Logger) error {
 	}
 	if flag.NArg() != 0 {
 		return fmt.Errorf("unexpected positional arguments")
+	}
+	if *path == "" {
+		executable, err := os.Executable()
+		if err != nil {
+			return fmt.Errorf("locate executable: %w", err)
+		}
+		*path = filepath.Join(filepath.Dir(executable), "config.json")
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()

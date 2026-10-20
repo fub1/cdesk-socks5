@@ -33,6 +33,21 @@ jobs:
         shell: pwsh
       - run: ./dist/cdesk-socks5-windows-amd64.exe -version
         shell: pwsh
+      - name: Verify implicit config from a different working directory
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path ./dist/cdesk-socks5-windows-amd64.exe).Path
+          $config = Get-Content ./config.example.json -Raw | ConvertFrom-Json
+          $config.auth.password = 'temporary-ci-config-check'
+          $config.targets[0] | Add-Member -NotePropertyName ips -NotePropertyValue @('127.0.0.1')
+          $config | ConvertTo-Json -Depth 10 | Set-Content ./dist/config.json -Encoding utf8NoBOM
+          try {
+            Push-Location $env:RUNNER_TEMP
+            try {
+              & $exe -check
+              if ($LASTEXITCODE -ne 0) { throw 'Implicit EXE-directory configuration failed' }
+            } finally { Pop-Location }
+          } finally { Remove-Item -LiteralPath ./dist/config.json }
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: cdesk-socks5-windows-amd64

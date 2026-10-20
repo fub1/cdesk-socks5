@@ -2,7 +2,7 @@
 
 This fork adds a small authenticated TCP CONNECT service for a LAN gateway that can reach RustDesk hbbs, hbbr and HTTPS API endpoints.
 See [Windows x64 setup](docs/windows-quickstart.md) and [configuration example](config.example.json).
-Build with `./scripts/build-windows.ps1`; run `cdesk-socks5-windows-amd64.exe -config config.json`.
+Build with `./scripts/build-windows.ps1`; place `config.json` beside the executable and run `cdesk-socks5-windows-amd64.exe` without arguments. NSSM can manage it as a Windows service.
 The library module path is retained for upstream compatibility. The service is based on upstream v0.1.3.
 
 The upstream library documentation follows.

@@ -5,7 +5,7 @@
 
 ## 启动
 
-1. 将 `config.example.json` 复制为 `config.json`。
+1. 将 `config.example.json` 复制为 EXE 所在目录中的 `config.json`。
 2. `listen` 改为中转设备的内网 IP 和监听端口。
 3. 设置 `auth.username` 和 `auth.password`；示例占位密码会导致启动失败。
 4. `allow_sources` 填写允许的内网 PC 地址段；单机使用 `/32`（IPv6 `/128`）。
@@ -13,12 +13,37 @@
 6. 校验后启动：
 
 ```powershell
-.\cdesk-socks5-windows-amd64.exe -config .\config.json -check
-.\cdesk-socks5-windows-amd64.exe -config .\config.json
+.\cdesk-socks5-windows-amd64.exe -check
+.\cdesk-socks5-windows-amd64.exe
 ```
 
-以 Ctrl+C 停止，服务会关闭监听和当前连接。它是前台控制台程序；本版未注册 Windows Service。
+无参数时固定读取 EXE 同目录的 `config.json`，不依赖当前工作目录。
+`-config` 可覆盖默认路径；显式传入的相对路径仍相对于工作目录。
+配置缺失或无效时报告错误并退出，不会自动创建配置或回退到其他目录。
+以 Ctrl+C 停止，服务会关闭监听和当前连接。
 Windows 防火墙需允许指定内网来源访问监听 TCP 端口。仅在实际部署时配置此规则。
+
+## 使用 NSSM 运行 Windows 服务
+
+将程序和已配置的 `config.json` 放在例如 `C:\cDeskProxy`。
+NSSM Application 页：Path 指向 EXE，Startup directory 可设为 `C:\cDeskProxy`，Arguments 留空。
+默认配置路径始终相对于 EXE，即使 NSSM 使用其他工作目录也不受影响。
+
+在管理员终端中运行以下命令（按实际安装目录替换）：
+
+```powershell
+nssm install cDeskSocks5 "C:\cDeskProxy\cdesk-socks5-windows-amd64.exe"
+nssm set cDeskSocks5 AppDirectory "C:\cDeskProxy"
+nssm reset cDeskSocks5 AppParameters
+nssm set cDeskSocks5 Start SERVICE_AUTO_START
+nssm set cDeskSocks5 AppStderr "C:\cDeskProxy\service.log"
+nssm start cDeskSocks5
+```
+
+停止或重启使用 `nssm stop cDeskSocks5`、`nssm restart cDeskSocks5`。
+保留 NSSM 默认控制台停止方式，程序响应 Ctrl+C 并清理连接。
+NSSM 管理服务生命周期，程序保持前台运行；NSSM 本体需保留在安装服务时的路径。
+官方说明：https://nssm.cc/usage 和 https://nssm.cc/commands 。
 
 ## 目标限制和 DNS
 
