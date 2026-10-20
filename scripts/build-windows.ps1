@@ -13,7 +13,7 @@ try {
     $dirty = git status --porcelain
     if ($dirty) { $revision += '-dirty' }
     New-Item -ItemType Directory -Force -Path dist | Out-Null
-    go build -trimpath -ldflags "-s -w -X main.version=0.1.1-$revision" -o dist/cdesk-socks5-windows-amd64.exe ./cmd/cdesk-socks5
+    go build -trimpath -ldflags "-s -w -X main.version=0.1.2-$revision" -o dist/cdesk-socks5-windows-amd64.exe ./cmd/cdesk-socks5
     if ($LASTEXITCODE -ne 0) { throw 'Windows build failed' }
     Copy-Item -LiteralPath config.example.json -Destination dist/config.example.json
     Copy-Item -LiteralPath LICENSE -Destination dist/LICENSE

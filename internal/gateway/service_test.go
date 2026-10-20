@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -155,6 +156,46 @@ func TestInfoLogsSuccessfulTunnel(t *testing.T) {
 	}
 }
 
+func TestServerFirstHandshakeAndByteSummary(t *testing.T) {
+	port := tcpTarget(t, "server-first")
+	cfg := testConfig(port)
+	cfg.LogLevel = "info"
+	var logs logBuffer
+	address, _, _ := startService(t, cfg, log.New(&logs, "", 0))
+	c, status := authenticate(t, address, "test-secret")
+	if status != 0 || request(t, c, 1, "rustdesk.test", port) != 0 {
+		t.Fatal("CONNECT failed")
+	}
+	greeting := make([]byte, len("server-first-handshake"))
+	if _, err := io.ReadFull(c, greeting); err != nil || string(greeting) != "server-first-handshake" {
+		t.Fatalf("server-first data not relayed: %q %v", greeting, err)
+	}
+	payload := "opaque-client-handshake"
+	if _, err := io.WriteString(c, payload); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.(*net.TCPConn).CloseWrite(); err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(c)
+	if err != nil || string(body) != payload {
+		t.Fatalf("half-close response not relayed: %q %v", body, err)
+	}
+	waitLog(t, &logs, "INFO transfer_summary")
+	text := logs.text()
+	for _, want := range []string{
+		"INFO first_upstream_bytes", "INFO first_client_bytes_forwarded", "INFO upstream_read_end",
+		fmt.Sprintf("bytes_to_upstream=%d bytes_from_upstream=%d", len(payload), len(payload)+len(greeting)),
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("missing %q: %s", want, text)
+		}
+	}
+	if strings.Contains(text, payload) || strings.Contains(text, string(greeting)) {
+		t.Fatal("application data leaked into logs")
+	}
+}
+
 func tcpTarget(t *testing.T, mode string) int {
 	t.Helper()
 	l, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp4", "127.0.0.1:0")
@@ -179,6 +220,11 @@ func tcpTarget(t *testing.T, mode string) int {
 						_, _ = c.Write(append([]byte("reply:"), body...))
 					}
 					return
+				}
+				if mode == "server-first" {
+					if _, err := io.WriteString(c, "server-first-handshake"); err != nil {
+						return
+					}
 				}
 				_, _ = io.Copy(c, c)
 			}()

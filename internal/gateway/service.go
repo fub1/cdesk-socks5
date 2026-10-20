@@ -109,6 +109,9 @@ func (p policy) dial(ctx context.Context, network, _ string, req *socks5.Request
 		conn, err := dialer.DialContext(ctx, "tcp", upstream)
 		if err == nil {
 			p.event("INFO", "connected src=%q target=%q upstream=%q elapsed=%s", req.RemoteAddr, requestTarget(req), conn.RemoteAddr(), time.Since(started))
+			if p.settings.LogLevel == "info" && p.logger != nil {
+				return &observedConn{Conn: conn, policy: p, source: req.RemoteAddr.String(), target: requestTarget(req), started: time.Now()}, nil
+			}
 			return conn, nil
 		}
 		p.event("WARN", "dial_failed src=%q target=%q upstream=%q error=%q", req.RemoteAddr, requestTarget(req), upstream, err.Error())

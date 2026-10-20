@@ -102,6 +102,10 @@ RustDesk 的网络/代理设置：
 6. `target_denied` 会列出实际请求的目标，核对是否仍指向旧服务器、是否多请求了未放行端口。
 7. `dial_failed` 会列出中转设备尝试连接的 IP/端口和系统错误；在中转设备测试该目标 TCP 端口。
 8. `connected` 只证明 TCP 隧道建立；RustDesk 公钥、服务器配置、远控授权等仍由客户端与服务端处理。
+9. `info` 还记录两个方向首次收到/转发数据的时间，以及关闭时的 `transfer_summary`。
+   `bytes_to_upstream` 是向服务器实际写入的业务字节，`bytes_from_upstream` 是从服务器读取的业务字节，不含 SOCKS5 认证和连接响应。
+   `upstream_read_end` 表示从服务器读取结束；`client_to_upstream_copy_end` 表示客户端方向的复制循环结束，可能因 EOF 或读取错误，须结合相邻错误日志判断。
+   计数不代表客户端已解析或接受数据；异常强制关闭时摘要是关闭当时的计数。
 
 ## 编译与验证
 
