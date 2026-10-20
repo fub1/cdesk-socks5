@@ -19,9 +19,10 @@ type AuthConfig struct {
 }
 
 type TargetConfig struct {
-	Host  string   `json:"host"`
-	IPs   []string `json:"ips,omitempty"`
-	Ports []int    `json:"ports"`
+	Host        string   `json:"host"`
+	IPs         []string `json:"ips,omitempty"`
+	Ports       []int    `json:"ports"`
+	OSSHBBSPort int      `json:"oss_hbbs_port,omitempty"`
 }
 
 type Config struct {
@@ -39,18 +40,20 @@ type Config struct {
 }
 
 type target struct {
-	ips   []netip.Addr
-	ports map[int]bool
+	ips     []netip.Addr
+	ports   map[int]bool
+	ossPort int
 }
 
 type settings struct {
 	Config
-	sources   []netip.Prefix
-	hosts     map[string]*target
-	ipPorts   map[netip.Addr]map[int]bool
-	handshake time.Duration
-	dial      time.Duration
-	keepalive time.Duration
+	sources    []netip.Prefix
+	hosts      map[string]*target
+	ipPorts    map[netip.Addr]map[int]bool
+	ossIPPorts map[netip.Addr]map[int]bool
+	handshake  time.Duration
+	dial       time.Duration
+	keepalive  time.Duration
 }
 
 func Load(path string) (Config, error) {
@@ -117,7 +120,7 @@ func prepare(ctx context.Context, cfg Config) (*settings, error) {
 	if cfg.LogLevel != "warn" && cfg.LogLevel != "info" {
 		return nil, fmt.Errorf("log_level must be warn or info")
 	}
-	s := &settings{Config: cfg, hosts: make(map[string]*target), ipPorts: make(map[netip.Addr]map[int]bool)}
+	s := &settings{Config: cfg, hosts: make(map[string]*target), ipPorts: make(map[netip.Addr]map[int]bool), ossIPPorts: make(map[netip.Addr]map[int]bool)}
 	if s.handshake, err = duration(cfg.HandshakeTimeout, "10s", "handshake_timeout"); err != nil {
 		return nil, err
 	}
@@ -161,6 +164,12 @@ func prepare(ctx context.Context, cfg Config) (*settings, error) {
 		if len(t.ports) == 0 {
 			return nil, fmt.Errorf("target %q requires ports", tc.Host)
 		}
+		if tc.OSSHBBSPort != 0 {
+			if !t.ports[tc.OSSHBBSPort] {
+				return nil, fmt.Errorf("oss_hbbs_port must be included in target ports")
+			}
+			t.ossPort = tc.OSSHBBSPort
+		}
 		for _, value := range tc.IPs {
 			addr, err := netip.ParseAddr(value)
 			if err != nil || addr.Zone() != "" || addr.IsUnspecified() || addr.IsMulticast() {
@@ -191,6 +200,12 @@ func prepare(ctx context.Context, cfg Config) (*settings, error) {
 			s.hosts[name] = t
 		}
 		for _, ip := range t.ips {
+			if t.ossPort != 0 {
+				if s.ossIPPorts[ip] == nil {
+					s.ossIPPorts[ip] = make(map[int]bool)
+				}
+				s.ossIPPorts[ip][t.ossPort] = true
+			}
 			if s.ipPorts[ip] == nil {
 				s.ipPorts[ip] = make(map[int]bool)
 			}

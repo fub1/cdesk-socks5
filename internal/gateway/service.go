@@ -109,6 +109,9 @@ func (p policy) dial(ctx context.Context, network, _ string, req *socks5.Request
 		conn, err := dialer.DialContext(ctx, "tcp", upstream)
 		if err == nil {
 			p.event("INFO", "connected src=%q target=%q upstream=%q elapsed=%s", req.RemoteAddr, requestTarget(req), conn.RemoteAddr(), time.Since(started))
+			if p.ossEnabled(req) {
+				return newOSSConn(conn, p, req.RemoteAddr.String(), requestTarget(req)), nil
+			}
 			if p.settings.LogLevel == "info" && p.logger != nil {
 				return &observedConn{Conn: conn, policy: p, source: req.RemoteAddr.String(), target: requestTarget(req), started: time.Now()}, nil
 			}
@@ -143,6 +146,9 @@ func New(ctx context.Context, cfg Config, logger *log.Logger) (*Service, error) 
 				}
 			}
 			logger.Printf("INFO target_allowed host=%q ips=%v ports=%v", tc.Host, ips, tc.Ports)
+			if tc.OSSHBBSPort != 0 {
+				logger.Printf("WARN oss_bridge_enabled host=%q port=%d signalling=legacy_plaintext client=RustDesk-1.5.0", tc.Host, tc.OSSHBBSPort)
+			}
 		}
 	}
 	server := socks5.NewServer(

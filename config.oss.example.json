@@ -1,0 +1,22 @@
+{
+  "listen": "192.168.72.58:1080",
+  "auth": {
+    "username": "cdesk",
+    "password": "REPLACE_WITH_SITE_SECRET"
+  },
+  "allow_sources": ["192.168.72.98/32"],
+  "targets": [
+    {
+      "host": "rd.2iu.net",
+      "ports": [21116, 21117, 443],
+      "oss_hbbs_port": 21116
+    }
+  ],
+  "max_connections": 16,
+  "buffer_bytes": 16384,
+  "handshake_timeout": "10s",
+  "dns_timeout": "5s",
+  "dial_timeout": "10s",
+  "tcp_keepalive": "60s",
+  "log_level": "info"
+}

@@ -33,6 +33,25 @@ jobs:
         shell: pwsh
       - run: ./dist/cdesk-socks5-windows-amd64.exe -version
         shell: pwsh
+      - name: Test adapter against official OSS hbbs 1.1.16
+        shell: pwsh
+        run: |
+          $fixtureDir = Join-Path $env:RUNNER_TEMP 'cdesk-oss-integration'
+          New-Item -ItemType Directory -Force -Path $fixtureDir | Out-Null
+          $archive = Join-Path $fixtureDir 'server.zip'
+          Invoke-WebRequest 'https://github.com/rustdesk/rustdesk-server/releases/download/1.1.16/rustdesk-server-windows-x86_64-unsigned.zip' -OutFile $archive
+          if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLower() -ne 'b865a3a62fc8755b45480c508f1c4871c3338590408dda8c58c7e9c373b7adb0') { throw 'OSS fixture hash mismatch' }
+          Expand-Archive -LiteralPath $archive -DestinationPath $fixtureDir
+          $hbbs = Join-Path $fixtureDir 'x86_64/hbbs.exe'
+          $server = Start-Process -FilePath $hbbs -ArgumentList @('-p','39116') -WorkingDirectory $fixtureDir -WindowStyle Hidden -RedirectStandardOutput (Join-Path $fixtureDir 'stdout.log') -RedirectStandardError (Join-Path $fixtureDir 'stderr.log') -PassThru
+          try {
+            $env:CDESK_OSS_TEST_ADDR = '127.0.0.1:39116'
+            go test ./internal/gateway -run '^TestOSSRealServer$' -v -count=1
+            if ($LASTEXITCODE -ne 0) { throw 'Real OSS integration failed' }
+          } finally {
+            Remove-Item Env:CDESK_OSS_TEST_ADDR -ErrorAction SilentlyContinue
+            if (-not $server.HasExited) { Stop-Process -Id $server.Id }
+          }
       - name: Verify implicit config from a different working directory
         shell: pwsh
         run: |

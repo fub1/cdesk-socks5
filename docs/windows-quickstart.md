@@ -5,7 +5,12 @@
 
 ## RustDesk 服务端兼容前提
 
-本程序提供 TCP 隧道，不会补齐 hbbs 的注册协议。官方客户端启用内置 SOCKS5 后会走 TCP 注册；
+0.2.0 起可在目标项设置 `"oss_hbbs_port": 21116`，启用 [OSS 协议适配](rustdesk-oss-bridge.md)。
+使用 `config.oss.example.json` 或在现有配置对应的 targets 项中增加该字段，原 SOCKS5 地址、账号密码、公钥及服务器设置不变。
+此模式使用 1.5.0 的旧服务端兼容路径，不建立额外的客户端到网关信令加密；远控数据仍由原有端到端流程处理。
+网关需要能访问服务端 UDP 21116。未设置该字段的目标继续透明 TCP 转发。
+
+原 0.1.2 程序只提供透明 TCP 隧道。官方客户端启用内置 SOCKS5 后会走 TCP 注册；
 官方开源版 hbbs 的 TCP `RegisterPk` 分支返回 `NOT_SUPPORT`，不能使用此组合完成上线。
 官方在 [SOCKS5 问题 #13010](https://github.com/rustdesk/rustdesk/issues/13010) 中确认该能力仅支持 Pro 服务端。
 定制服务端需要自行确认已经实现相应 TCP 注册和握手能力；仅添加 API 不能证明兼容。
@@ -15,7 +20,7 @@
 官方 OSS 的处理见 [rendezvous_server.rs](https://github.com/rustdesk/rustdesk-server/blob/master/src/rendezvous_server.rs) 中的 `handle_tcp`。
 
 因此，TCP 端口可达或日志出现 `connected` 均不能作为 RustDesk 已上线的证据。
-如果使用 OSS，应改用保留正常 UDP 注册的网络转发方案，或实现兼容的服务端 TCP 注册；
+0.2.0 的适配在网关中转换注册和通知，不需要修改 OSS 服务端。
 仅在 SOCKS5 服务中增加 UDP ASSOCIATE，不能改变上述客户端已选择 TCP 的行为。
 
 ## 启动
