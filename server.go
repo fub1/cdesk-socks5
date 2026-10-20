@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"time"
 
 	"github.com/things-go/go-socks5/bufferpool"
 	"github.com/things-go/go-socks5/statute"
@@ -22,6 +23,7 @@ type GPool interface {
 // Server is responsible for accepting connections and handling
 // the details of the SOCKS5 protocol
 type Server struct {
+	handshakeTimeout time.Duration
 	// authMethods can be provided to implement authentication
 	// By default, "no-auth" mode is enabled.
 	// For password-based auth use UserPassAuthenticator.
@@ -131,6 +133,11 @@ func (sf *Server) ServeConn(conn net.Conn) error {
 	var authContext *AuthContext
 
 	defer conn.Close() // nolint: errcheck
+	if sf.handshakeTimeout > 0 {
+		if err := conn.SetDeadline(time.Now().Add(sf.handshakeTimeout)); err != nil {
+			return err
+		}
+	}
 
 	bufConn := bufio.NewReader(conn)
 
@@ -175,6 +182,11 @@ func (sf *Server) ServeConn(conn net.Conn) error {
 	request.AuthContext = authContext
 	request.LocalAddr = conn.LocalAddr()
 	request.RemoteAddr = conn.RemoteAddr()
+	if sf.handshakeTimeout > 0 {
+		if err := conn.SetDeadline(time.Time{}); err != nil {
+			return err
+		}
+	}
 	// Process the client request
 	return sf.handleRequest(conn, request)
 }

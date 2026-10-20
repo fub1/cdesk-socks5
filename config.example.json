@@ -1,0 +1,21 @@
+{
+  "listen": "192.168.10.2:1080",
+  "auth": {
+    "username": "cdesk",
+    "password": "REPLACE_WITH_SITE_SECRET"
+  },
+  "allow_sources": ["192.168.10.0/24"],
+  "targets": [
+    {
+      "host": "rustdesk.viget.net",
+      "ports": [21116, 21117, 443]
+    }
+  ],
+  "max_connections": 16,
+  "buffer_bytes": 16384,
+  "handshake_timeout": "10s",
+  "dns_timeout": "5s",
+  "dial_timeout": "10s",
+  "tcp_keepalive": "60s",
+  "log_level": "warn"
+}

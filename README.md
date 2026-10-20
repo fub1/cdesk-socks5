@@ -1,4 +1,11 @@
-# go-socks5 
+# cDesk SOCKS5 gateway / go-socks5
+
+This fork adds a small authenticated TCP CONNECT service for a LAN gateway that can reach RustDesk hbbs, hbbr and HTTPS API endpoints.
+See [Windows x64 setup](docs/windows-quickstart.md) and [configuration example](config.example.json).
+Build with `./scripts/build-windows.ps1`; run `cdesk-socks5-windows-amd64.exe -config config.json`.
+The library module path is retained for upstream compatibility. The service is based on upstream v0.1.3.
+
+The upstream library documentation follows.
 
 [![GoDoc](https://godoc.org/github.com/things-go/go-socks5?status.svg)](https://godoc.org/github.com/things-go/go-socks5)
 [![Go.Dev reference](https://img.shields.io/badge/go.dev-reference-blue?logo=go&logoColor=white)](https://pkg.go.dev/github.com/things-go/go-socks5?tab=doc)

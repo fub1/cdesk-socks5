@@ -4,12 +4,21 @@ import (
 	"context"
 	"io"
 	"net"
+	"time"
 
 	"github.com/things-go/go-socks5/bufferpool"
 )
 
 // Option user's option
 type Option func(s *Server)
+
+// WithHandshakeTimeout bounds authentication and request parsing, not data transfer.
+// Zero preserves the default behavior without a handshake deadline.
+func WithHandshakeTimeout(timeout time.Duration) Option {
+	return func(s *Server) {
+		s.handshakeTimeout = timeout
+	}
+}
 
 // WithBufferPool can be provided to implement custom buffer pool
 // By default, buffer pool use size is 32k

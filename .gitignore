@@ -22,3 +22,7 @@ _testmain.go
 
 *.exe
 
+/dist/
+/config.json
+/config.*.local.json
+

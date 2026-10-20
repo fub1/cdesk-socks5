@@ -1,0 +1,76 @@
+# cDesk SOCKS5 Windows x64
+
+基于 things-go/go-socks5 v0.1.3（c47d209a1459e1c86f200ba174eca9cb0bd5a14e）的最小服务。
+使用原有 MIT 许可证。生产程序只使用 Go 标准库和本仓库代码，无 CGo。
+
+## 启动
+
+1. 将 `config.example.json` 复制为 `config.json`。
+2. `listen` 改为中转设备的内网 IP 和监听端口。
+3. 设置 `auth.username` 和 `auth.password`；示例占位密码会导致启动失败。
+4. `allow_sources` 填写允许的内网 PC 地址段；单机使用 `/32`（IPv6 `/128`）。
+5. 保留或修改 `targets`，每项包含允许的主机、端口及可选的固定 `ips`。
+6. 校验后启动：
+
+```powershell
+.\cdesk-socks5-windows-amd64.exe -config .\config.json -check
+.\cdesk-socks5-windows-amd64.exe -config .\config.json
+```
+
+以 Ctrl+C 停止，服务会关闭监听和当前连接。它是前台控制台程序；本版未注册 Windows Service。
+Windows 防火墙需允许指定内网来源访问监听 TCP 端口。仅在实际部署时配置此规则。
+
+## 目标限制和 DNS
+
+默认转发目标：`rustdesk.viget.net` 的 TCP 21116（hbbs）、21117（hbbr）、443（HTTPS API）。
+不解析 RustDesk 消息，不终止 API TLS，原有远控密码和授权继续生效。
+
+未指定 `ips` 时，启动期间使用中转设备的 DNS 解析目标，得到本次运行固定的允许 IP 集合。
+域名请求只接受精确域名匹配（忽略大小写及末尾点）；IP 请求只接受上述 IP 与对应端口。
+不支持域名通配符，不允许其他目标端口。域名变化后重启服务以刷新地址。
+
+如需固定地址，在目标项中添加 `"ips": ["实际服务器IP"]`，此时该项不执行 DNS 查询。
+域名请求也只拨这些 IP，不进行第二次解析。多 IP 目标按配置/解析顺序尝试，拨号总时间受限。
+`ips` 可包含 IPv4 和 IPv6；测试用的 203.0.113.0/24 地址不可当作真实服务器。
+
+RustDesk 1.5.0 的 HTTP API SOCKS5 客户端会在 PC 本地解析目标域名。
+内网 PC 必须通过可用 DNS 或 hosts 解析 API 域名，且结果属于代理允许的 IP 集合。
+只在中转设备解析成功不能解决 PC 本地 DNS 失败。分离 DNS 环境需在目标 `ips` 中列明实际获准地址。
+
+## 客户端设置
+
+RustDesk 的网络/代理设置：
+
+```text
+代理：socks5://中转设备内网IP:1080
+用户名：与 auth.username 一致
+密码：与 auth.password 一致
+```
+
+保持 ID 服务器、Relay 服务器、API 地址及公钥为原来的配置。确认安装版服务进程也取得代理设置。
+不启用 WebSocket 叠加代理。SOCKS5 用户名密码在客户端到中转设备之间明文传输，部署在可信内网。
+
+## 资源和日志
+
+默认最多 16 条同时打开的 TCP 连接（包括注册连接，不是 16 台 PC 或 16 个远控会话）。
+每方向提供 16 KiB 转发缓冲池，另有 Go 运行时、协议及系统 socket 开销。
+`max_connections`、`buffer_bytes` 可按现场负载调整。
+`handshake_timeout` 只限制认证和请求头读取，成功读取后清除，不限制远控会话总时长。
+`dns_timeout` 限制每个配置目标的启动解析，`dial_timeout` 限制一次请求的总拨号时间。
+`tcp_keepalive` 用于两侧 TCP 保活，不等于业务心跳或空闲断开。
+
+默认 `log_level=warn` 仅输出启动/致命错误。排障可用 `info` 记录单连接错误，不记录口令和转发内容。
+配置启动时读取，不提供 Web 管理、数据库、动态更新或 UDP/BIND 转发。
+
+## 编译与验证
+
+```powershell
+go test ./...
+go vet ./...
+.\scripts\build-windows.ps1
+```
+
+产物在 `dist/`；脚本使用 `CGO_ENABLED=0 GOOS=windows GOARCH=amd64 GOAMD64=v1`，
+并生成 SHA256SUMS.txt。版本包含 Git 提交号；工作区有未提交改动时带 dirty。
+真实部署需在 PC 无法直连外网服务器时验证：hbbs 上线、hbbr 远控、API 请求及断线重连。
+自动测试使用本地 TCP 和 HTTPS 目标，不能代替真实双端 RustDesk 验收。
