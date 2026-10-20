@@ -17,5 +17,5 @@
   "dns_timeout": "5s",
   "dial_timeout": "10s",
   "tcp_keepalive": "60s",
-  "log_level": "warn"
+  "log_level": "info"
 }

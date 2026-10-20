@@ -84,8 +84,24 @@ RustDesk 的网络/代理设置：
 `dns_timeout` 限制每个配置目标的启动解析，`dial_timeout` 限制一次请求的总拨号时间。
 `tcp_keepalive` 用于两侧 TCP 保活，不等于业务心跳或空闲断开。
 
-默认 `log_level=warn` 仅输出启动/致命错误。排障可用 `info` 记录单连接错误，不记录口令和转发内容。
+程序同时输出到控制台 stderr 和 EXE 同目录的 `cdesk-socks5.log`，日志时间为 UTC。
+日志文件追加写入；目录不可写时会明确提示并继续输出到 stderr。
+`log_level=warn` 仍记录认证失败、来源/目标拒绝、连接数限制、握手/转发错误和拨号失败。
+样例使用 `info`，额外记录连接到达、请求目标、实际拨号 IP、连接成功及关闭。
+启动时输出配置文件路径、允许来源、目标解析 IP 和端口，便于检查实际加载配置和 DNS 差异。
+不会记录用户名密码或转发内容。长期使用 `info` 时需由运维管理日志文件大小。
 配置启动时读取，不提供 Web 管理、数据库、动态更新或 UDP/BIND 转发。
+
+### 排查无法连接
+
+1. 将 `log_level` 设置为 `info`，重启代理，再保存/重启 RustDesk 的代理设置。
+2. 客户端先测试 `Test-NetConnection 中转设备内网IP -Port 1080`。
+3. 日志出现 `accepted` 才证明客户端连接到达；没有该记录时，先查客户端到代理的网络、防火墙及客户端代理是否生效。
+4. `authentication_failed` 表示认证失败；`authentication_method_rejected` 通常表示客户端没有提供用户名密码认证。
+5. `source_denied` 或 `connection_limit` 表示连接在握手前被拒绝。
+6. `target_denied` 会列出实际请求的目标，核对是否仍指向旧服务器、是否多请求了未放行端口。
+7. `dial_failed` 会列出中转设备尝试连接的 IP/端口和系统错误；在中转设备测试该目标 TCP 端口。
+8. `connected` 只证明 TCP 隧道建立；RustDesk 公钥、服务器配置、远控授权等仍由客户端与服务端处理。
 
 ## 编译与验证
 

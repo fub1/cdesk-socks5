@@ -25,4 +25,5 @@ _testmain.go
 /dist/
 /config.json
 /config.*.local.json
+*.log
 

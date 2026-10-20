@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -31,11 +32,15 @@ func testConfig(port int) Config {
 	}
 }
 
-func startService(t *testing.T, cfg Config) (string, context.CancelFunc, <-chan error) {
+func startService(t *testing.T, cfg Config, loggers ...*log.Logger) (string, context.CancelFunc, <-chan error) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	s, err := New(ctx, cfg, log.New(io.Discard, "", 0))
+	logger := log.New(io.Discard, "", 0)
+	if len(loggers) > 0 {
+		logger = loggers[0]
+	}
+	s, err := New(ctx, cfg, logger)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,6 +62,97 @@ func startService(t *testing.T, cfg Config) (string, context.CancelFunc, <-chan 
 		}
 	})
 	return l.Addr().String(), cancel, done
+}
+
+type logBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (b *logBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.b.Write(p)
+}
+
+func (b *logBuffer) text() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.b.String()
+}
+
+func waitLog(t *testing.T, b *logBuffer, event string) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for !strings.Contains(b.text(), event) {
+		if time.Now().After(deadline) {
+			t.Fatalf("missing log event %q: %s", event, b.text())
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+func TestWarnLogsFailuresWithoutSecrets(t *testing.T) {
+	port := tcpTarget(t, "echo")
+	closed, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	closedPort := closed.Addr().(*net.TCPAddr).Port
+	if err := closed.Close(); err != nil {
+		t.Fatal(err)
+	}
+	cfg := testConfig(port)
+	cfg.Targets[0].Ports = append(cfg.Targets[0].Ports, closedPort)
+	cfg.LogLevel = "warn"
+	var logs logBuffer
+	address, _, _ := startService(t, cfg, log.New(&logs, "", 0))
+	_, status := authenticate(t, address, "never-log-this-password")
+	if status == 0 {
+		t.Fatal("wrong password accepted")
+	}
+	waitLog(t, &logs, "WARN authentication_failed")
+	c, status := authenticate(t, address, "test-secret")
+	if status != 0 || request(t, c, 1, "rustdesk.test", 1) == 0 {
+		t.Fatal("forbidden port accepted")
+	}
+	waitLog(t, &logs, "WARN target_denied")
+	c2, status := authenticate(t, address, "test-secret")
+	if status != 0 || request(t, c2, 1, "other.invalid", port) == 0 {
+		t.Fatal("forbidden hostname accepted")
+	}
+	waitLog(t, &logs, "reason=hostname_not_allowed")
+	c3, status := authenticate(t, address, "test-secret")
+	if status != 0 || request(t, c3, 1, "rustdesk.test", closedPort) == 0 {
+		t.Fatal("unavailable target unexpectedly connected")
+	}
+	waitLog(t, &logs, "WARN dial_failed")
+	text := logs.text()
+	if !strings.Contains(text, "src=") || !strings.Contains(text, `target="rustdesk.test:1"`) {
+		t.Fatalf("source or target missing: %s", text)
+	}
+	if strings.Contains(text, "never-log-this-password") || strings.Contains(text, "test-secret") {
+		t.Fatal("credentials leaked to logs")
+	}
+}
+
+func TestInfoLogsSuccessfulTunnel(t *testing.T) {
+	port := tcpTarget(t, "echo")
+	cfg := testConfig(port)
+	cfg.LogLevel = "info"
+	var logs logBuffer
+	address, _, _ := startService(t, cfg, log.New(&logs, "", 0))
+	c, status := authenticate(t, address, "test-secret")
+	if status != 0 || request(t, c, 1, "rustdesk.test", port) != 0 {
+		t.Fatal("CONNECT failed")
+	}
+	waitLog(t, &logs, "INFO connected")
+	text := logs.text()
+	for _, want := range []string{"INFO accepted", "INFO target_allowed", "INFO dial_start", "upstream=\"127.0.0.1:"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("missing %q: %s", want, text)
+		}
+	}
 }
 
 func tcpTarget(t *testing.T, mode string) int {
@@ -279,7 +375,8 @@ func TestSourceLimitTimeoutAndShutdown(t *testing.T) {
 	t.Run("source", func(t *testing.T) {
 		cfg := testConfig(port)
 		cfg.AllowSources = []string{"192.0.2.0/24"}
-		address, _, _ := startService(t, cfg)
+		var logs logBuffer
+		address, _, _ := startService(t, cfg, log.New(&logs, "", 0))
 		c, err := (&net.Dialer{Timeout: time.Second}).DialContext(context.Background(), "tcp", address)
 		if err != nil {
 			t.Fatal(err)
@@ -295,12 +392,14 @@ func TestSourceLimitTimeoutAndShutdown(t *testing.T) {
 		if n, _ := c.Read(b[:]); n != 0 {
 			t.Fatal("denied source reached SOCKS negotiation")
 		}
+		waitLog(t, &logs, "WARN source_denied")
 	})
 	t.Run("connection-cap-and-timeout", func(t *testing.T) {
 		cfg := testConfig(port)
 		cfg.MaxConnections = 1
 		cfg.HandshakeTimeout = "150ms"
-		address, _, _ := startService(t, cfg)
+		var logs logBuffer
+		address, _, _ := startService(t, cfg, log.New(&logs, "", 0))
 		c, err := (&net.Dialer{Timeout: time.Second}).DialContext(context.Background(), "tcp", address)
 		if err != nil {
 			t.Fatal(err)
@@ -327,6 +426,7 @@ func TestSourceLimitTimeoutAndShutdown(t *testing.T) {
 		if n, err := second.Read(reply[:]); n != 0 || err == nil {
 			t.Fatal("connection cap not enforced")
 		}
+		waitLog(t, &logs, "WARN connection_limit")
 		if n, err := c.Read(reply[:]); n != 0 || err == nil {
 			t.Fatal("incomplete authentication not timed out")
 		}

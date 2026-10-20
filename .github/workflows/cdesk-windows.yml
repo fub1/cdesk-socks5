@@ -51,5 +51,7 @@ jobs:
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: cdesk-socks5-windows-amd64
-          path: dist/
+          path: |
+            dist/*
+            !dist/*.log
           if-no-files-found: error
